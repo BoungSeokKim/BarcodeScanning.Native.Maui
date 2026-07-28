@@ -65,15 +65,15 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: 10.0.302
 
-      - name: Select Xcode 26.0
+      - name: Select Xcode 26.6
         run: |
-          sudo xcode-select --switch /Applications/Xcode_26.0.app/Contents/Developer
+          sudo xcode-select --switch /Applications/Xcode_26.6.app/Contents/Developer
           xcodebuild -version
 
       - name: Install MAUI workloads
-        run: dotnet workload install maui-ios maui-maccatalyst --skip-manifest-update
+        run: dotnet workload install maui-ios maui-maccatalyst --version 10.0.302.0
 
       - name: Build sample app iOS
         run: >
