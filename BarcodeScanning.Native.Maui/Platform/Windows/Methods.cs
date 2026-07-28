@@ -1,6 +1,7 @@
 ﻿using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.Marshalling;
 using Windows.Graphics.Imaging;
+using Windows.Storage.Streams;
 using ZXingCpp;
 
 namespace BarcodeScanning;
@@ -8,21 +9,41 @@ namespace BarcodeScanning;
 public static partial class Methods
 {
     public static async Task<IReadOnlySet<BarcodeResult>> ScanFromImageAsync(byte[] imageArray)
-        => await ScanFromStreamAsync(new MemoryStream(imageArray));
-    public static async Task<IReadOnlySet<BarcodeResult>> ScanFromImageAsync(FileResult file)
-        => await ScanFromStreamAsync(await file.OpenReadAsync());
-    public static async Task<IReadOnlySet<BarcodeResult>> ScanFromStreamAsync(Stream stream)
     {
-        var decoder = await BitmapDecoder.CreateAsync(stream.AsRandomAccessStream());
+        using var stream = new MemoryStream(imageArray);
+        using var randomStream = stream.AsRandomAccessStream();
+        return await ProcessBitmapAsync(randomStream);
+    }
+    public static async Task<IReadOnlySet<BarcodeResult>> ScanFromImageAsync(FileResult file)
+    {
+        using var stream = await file.OpenReadAsync();
+        using var randomStream = stream.AsRandomAccessStream();
+        return await ProcessBitmapAsync(randomStream);
+    }
+    public static async Task<IReadOnlySet<BarcodeResult>> ScanFromImageAsync(string url)
+    {
+        using var randomStream = await RandomAccessStreamReference.CreateFromUri(new Uri(url)).OpenReadAsync();
+        return await ProcessBitmapAsync(randomStream);
+    }
+    public static async Task<IReadOnlySet<BarcodeResult>> ScanFromImageAsync(Stream stream)
+    {
+        var randomStream = stream.AsRandomAccessStream();
+        return await ProcessBitmapAsync(randomStream);
+    }
+    
+    private static async Task<IReadOnlySet<BarcodeResult>> ProcessBitmapAsync(IRandomAccessStream stream)
+    {
+        var decoder = await BitmapDecoder.CreateAsync(stream);
         using var softwareBitmap = await decoder.GetSoftwareBitmapAsync();
 
-        var bitmap = softwareBitmap.BitmapPixelFormat switch
-        {
-            BitmapPixelFormat.Bgra8 => softwareBitmap,
-            BitmapPixelFormat.Rgba8 => softwareBitmap,
-            BitmapPixelFormat.Gray8 => softwareBitmap,
-            _ => SoftwareBitmap.Convert(softwareBitmap, BitmapPixelFormat.Gray8)
-        };
+        using var barcodeBitmap = 
+                softwareBitmap.BitmapPixelFormat is
+                    BitmapPixelFormat.Bgra8 or
+                    BitmapPixelFormat.Rgba8 or
+                    BitmapPixelFormat.Gray8
+                        ? null
+                        : SoftwareBitmap.Convert(softwareBitmap, BitmapPixelFormat.Gray8);
+        var bitmap = barcodeBitmap ?? softwareBitmap;
 
         using var buffer = bitmap.LockBuffer(BitmapBufferAccessMode.Read);
         using var reference = buffer.CreateReference();
